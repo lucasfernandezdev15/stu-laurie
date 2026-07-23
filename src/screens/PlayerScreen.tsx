@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -40,6 +40,7 @@ export function PlayerScreen({ navigation, route }: Props) {
   const episode = getEpisodeById(route.params.episodeId);
   const { hasActiveSubscription } = useAuth();
   const insets = useSafeAreaInsets();
+  const videoRef = useRef<VideoView>(null);
   const [error, setError] = useState<string | null>(null);
 
   const canPlay =
@@ -83,6 +84,10 @@ export function PlayerScreen({ navigation, route }: Props) {
       player.play();
     }
   }, [player]);
+
+  const enterFullscreen = useCallback(() => {
+    void videoRef.current?.enterFullscreen();
+  }, []);
 
   useTVEventHandler(
     useCallback(
@@ -150,6 +155,14 @@ export function PlayerScreen({ navigation, route }: Props) {
           style={styles.close}
           preferredFocus={isTV}
         />
+        {!isTV ? (
+          <AppButton
+            label="Fullscreen"
+            variant="secondary"
+            onPress={enterFullscreen}
+            style={styles.close}
+          />
+        ) : null}
         <AppButton
           label="Close"
           variant="secondary"
@@ -166,10 +179,12 @@ export function PlayerScreen({ navigation, route }: Props) {
           />
         ) : null}
         <VideoView
+          ref={videoRef}
           style={styles.video}
           player={player}
           contentFit="contain"
           nativeControls={!isTV}
+          fullscreenOptions={{ enable: true }}
           onFirstFrameRender={() => setError(null)}
         />
       </View>
@@ -216,14 +231,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   playerWrap: {
+    flex: 1,
     width: '100%',
-    maxWidth: 1280,
-    alignSelf: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
   },
   video: {
     width: '100%',
-    aspectRatio: 16 / 9,
+    height: '100%',
     backgroundColor: '#000',
   },
   spinner: {

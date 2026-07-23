@@ -14,7 +14,10 @@ interface ScreenProps {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
   edges?: Array<'top' | 'right' | 'bottom' | 'left'>;
-  /** Center content on large web viewports */
+  /**
+   * When true, caps width on large web viewports (forms / dense copy).
+   * Default false so media layouts use the full monitor width.
+   */
   constrainWeb?: boolean;
 }
 
@@ -22,7 +25,7 @@ export function Screen({
   children,
   style,
   edges = ['top', 'left', 'right'],
-  constrainWeb = true,
+  constrainWeb = false,
 }: ScreenProps) {
   return (
     <SafeAreaView edges={edges} style={styles.safe}>

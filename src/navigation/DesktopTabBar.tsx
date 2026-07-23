@@ -66,9 +66,7 @@ const styles = StyleSheet.create({
   },
   inner: {
     flex: 1,
-    maxWidth: desktopSpacing.contentMaxWidth,
     width: '100%',
-    alignSelf: 'center',
     paddingHorizontal: desktopSpacing.screenPad,
     flexDirection: 'row',
     alignItems: 'center',

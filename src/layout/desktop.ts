@@ -5,7 +5,8 @@ import { isTV } from '../tv/platform';
 export const DESKTOP_BREAKPOINT = 960;
 
 export const desktopSpacing = {
-  contentMaxWidth: 1280,
+  /** Soft cap for dense text columns only — main chrome uses full viewport width. */
+  contentMaxWidth: 1920,
   screenPad: 40,
   headerHeight: 64,
   cardWidth: 220,

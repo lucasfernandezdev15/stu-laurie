@@ -26,13 +26,9 @@ export function LibraryScreen({ navigation }: Props) {
   const { width } = useWindowDimensions();
   const isDesktop = useIsDesktopWeb();
   const hPad = isDesktop ? desktopSpacing.screenPad : 20;
-  const contentWidth = Math.min(
-    width,
-    desktopSpacing.contentMaxWidth,
-  );
-  const columns = contentWidth >= 1100 ? 4 : contentWidth >= 900 ? 3 : 2;
-  const cardWidth =
-    (contentWidth - hPad * 2 - CARD_GAP * (columns - 1)) / columns;
+  const columns =
+    width >= 1600 ? 6 : width >= 1280 ? 5 : width >= 1100 ? 4 : width >= 900 ? 3 : 2;
+  const cardWidth = (width - hPad * 2 - CARD_GAP * (columns - 1)) / columns;
 
   const onSelect = (episode: Episode) => {
     navigation.navigate('ContentDetail', { episodeId: episode.id });
