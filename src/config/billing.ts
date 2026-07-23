@@ -4,7 +4,7 @@
  */
 export const SUBSCRIBE_WEB_URL =
   process.env.EXPO_PUBLIC_SUBSCRIBE_WEB_URL?.trim() ||
-  'http://localhost:3000/subscribe';
+  'https://stu-suscription.vercel.app/subscribe';
 
 /** Direct Woo checkout (fallback / docs). Product Monthly #1928. */
 export const WOO_CHECKOUT_URL =

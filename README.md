@@ -43,7 +43,7 @@ En la app Expo, apuntá a esa URL:
 
 ```bash
 # .env
-EXPO_PUBLIC_SUBSCRIBE_WEB_URL=http://localhost:3000/subscribe
+EXPO_PUBLIC_SUBSCRIBE_WEB_URL=https://stu-suscription.vercel.app/subscribe
 ```
 
 Detalle: [`web-subscribe/README.md`](./web-subscribe/README.md)
