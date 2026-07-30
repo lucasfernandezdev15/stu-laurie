@@ -24,8 +24,8 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 export function LoginScreen({ navigation }: Props) {
   const { login } = useAuth();
   const isDesktop = useIsDesktopWeb();
-  const [email, setEmail] = useState('fan@varietyhour.demo');
-  const [password, setPassword] = useState('demo');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -38,8 +38,8 @@ export function LoginScreen({ navigation }: Props) {
     setIsSubmitting(false);
   };
 
-  const formBlock = (
-    <Pressable onPress={Keyboard.dismiss} accessible={false}>
+  const formContent = (
+    <>
       {!isDesktop ? (
         <>
           <Text style={styles.brand}>STU & LAURIE</Text>
@@ -90,8 +90,18 @@ export function LoginScreen({ navigation }: Props) {
           onPress={() => navigation.navigate('Register')}
         />
       </View>
-    </Pressable>
+    </>
   );
+
+  // On web, Pressable + Keyboard.dismiss steals focus from TextInputs.
+  const formBlock =
+    Platform.OS === 'web' ? (
+      formContent
+    ) : (
+      <Pressable onPress={Keyboard.dismiss} accessible={false}>
+        {formContent}
+      </Pressable>
+    );
 
   if (isDesktop) {
     return (

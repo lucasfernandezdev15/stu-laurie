@@ -8,6 +8,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import type { Episode } from '../data/catalog';
+import { PREMIUM_ON_HOLD, VIDEO_STATUS_GATE_ON_HOLD } from '../config/features';
 import { colors } from '../theme/colors';
 import { isTV, tvScale } from '../tv/platform';
 
@@ -52,9 +53,19 @@ export function ContentCard({
             <Text style={styles.liveText}>LIVE</Text>
           </View>
         ) : null}
-        {episode.isPremium ? (
+        {!PREMIUM_ON_HOLD && episode.isPremium ? (
           <View style={styles.premiumBadge}>
             <Text style={styles.premiumText}>PREMIUM</Text>
+          </View>
+        ) : null}
+        {!VIDEO_STATUS_GATE_ON_HOLD && !episode.canPlay ? (
+          <View style={styles.processingBadge}>
+            <Text style={styles.processingText}>
+              {episode.contentStatus === 'processing' ||
+              episode.contentStatus === 'draft'
+                ? 'PROCESSING'
+                : 'NOT READY'}
+            </Text>
           </View>
         ) : null}
       </View>
@@ -62,7 +73,12 @@ export function ContentCard({
         {episode.title}
       </Text>
       <Text style={styles.meta}>
-        {episode.durationMinutes} min · {episode.category}
+        {episode.isLive
+          ? 'LIVE'
+          : episode.durationMinutes > 0
+            ? `${episode.durationMinutes} min`
+            : 'VOD'}{' '}
+        · {episode.category}
       </Text>
     </Pressable>
   );
@@ -111,6 +127,22 @@ const styles = StyleSheet.create({
   },
   premiumText: {
     color: colors.accent,
+    fontFamily: 'SourceSans3_600SemiBold',
+    fontSize: 10,
+    letterSpacing: 0.8,
+  },
+  processingBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: colors.overlay,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: colors.textMuted,
+  },
+  processingText: {
+    color: colors.textMuted,
     fontFamily: 'SourceSans3_600SemiBold',
     fontSize: 10,
     letterSpacing: 0.8,

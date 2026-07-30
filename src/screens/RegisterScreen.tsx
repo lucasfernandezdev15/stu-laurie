@@ -49,7 +49,7 @@ export function RegisterScreen({ navigation }: Props) {
           <Text style={styles.brand}>Join the show</Text>
           <Text style={styles.subtitle}>
             Create your account. Subscription is managed on the web billing
-            flow (mocked here).
+            flow after signup.
           </Text>
 
           <Text style={styles.label}>Name</Text>

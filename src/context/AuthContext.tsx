@@ -7,21 +7,24 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fetchMe, loginUser, registerUser } from '../api/auth';
+import {
+  clearSessionTokens,
+  hydrateTokenMemory,
+  setAuthFailureHandler,
+} from '../api/client';
+import { displayNameFromUser, subscriptionFromUser } from '../api/entitlement';
+import { ApiError } from '../api/errors';
+import type { AuthUser } from '../api/types';
 
-interface User {
+export interface AppUser {
+  id: string;
   email: string;
   name: string;
 }
 
-interface PersistedSession {
-  user: User;
-  hasActiveSubscription: boolean;
-  planId: string | null;
-}
-
 interface AuthContextValue {
-  user: User | null;
+  user: AppUser | null;
   hasActiveSubscription: boolean;
   planId: string | null;
   isAuthenticated: boolean;
@@ -33,43 +36,72 @@ interface AuthContextValue {
     password: string,
   ) => Promise<string | null>;
   logout: () => Promise<void>;
-  activateSubscription: (planId: string) => Promise<void>;
-  cancelSubscription: () => Promise<void>;
+  refreshSession: () => Promise<void>;
 }
-
-const STORAGE_KEY = '@stu_laurie/session_v1';
-const DEMO_HINT =
-  'Usá un email válido y una contraseña de al menos 4 caracteres.';
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function toAppUser(authUser: AuthUser): AppUser {
+  return {
+    id: authUser.id || authUser.email,
+    email: authUser.email,
+    name: displayNameFromUser(authUser),
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
   const [planId, setPlanId] = useState<string | null>(null);
   const [isHydrating, setIsHydrating] = useState(true);
 
-  const persist = useCallback(async (session: PersistedSession | null) => {
-    if (!session) {
-      await AsyncStorage.removeItem(STORAGE_KEY);
-      return;
-    }
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+  const applyAuthUser = useCallback((authUser: AuthUser) => {
+    setUser(toAppUser(authUser));
+    const sub = subscriptionFromUser(authUser);
+    setHasActiveSubscription(sub.hasActiveSubscription);
+    setPlanId(sub.planId);
+  }, []);
+
+  const clearLocalSession = useCallback(async () => {
+    setUser(null);
+    setHasActiveSubscription(false);
+    setPlanId(null);
+    await clearSessionTokens();
+  }, []);
+
+  const refreshSession = useCallback(async () => {
+    const me = await fetchMe();
+    applyAuthUser(me);
+  }, [applyAuthUser]);
+
+  useEffect(() => {
+    setAuthFailureHandler(() => {
+      setUser(null);
+      setHasActiveSubscription(false);
+      setPlanId(null);
+    });
+    return () => setAuthFailureHandler(null);
   }, []);
 
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw && mounted) {
-          const session = JSON.parse(raw) as PersistedSession;
-          setUser(session.user);
-          setHasActiveSubscription(Boolean(session.hasActiveSubscription));
-          setPlanId(session.planId ?? null);
+        const tokens = await hydrateTokenMemory();
+        if (!tokens) {
+          return;
+        }
+        const me = await fetchMe();
+        if (mounted) {
+          applyAuthUser(me);
         }
       } catch {
-        // ignore corrupt storage
+        await clearSessionTokens();
+        if (mounted) {
+          setUser(null);
+          setHasActiveSubscription(false);
+          setPlanId(null);
+        }
       } finally {
         if (mounted) {
           setIsHydrating(false);
@@ -79,28 +111,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [applyAuthUser]);
 
   const login = useCallback(
     async (email: string, password: string) => {
       const normalized = email.trim().toLowerCase();
       if (!normalized.includes('@') || password.length < 4) {
-        return DEMO_HINT;
+        return 'Usá un email válido y una contraseña de al menos 4 caracteres.';
       }
-      await delay(350);
-      const nextUser: User = {
-        email: normalized,
-        name: displayNameFromEmail(normalized),
-      };
-      setUser(nextUser);
-      await persist({
-        user: nextUser,
-        hasActiveSubscription,
-        planId,
-      });
-      return null;
+      try {
+        const { user: authUser } = await loginUser({
+          email: normalized,
+          password,
+        });
+        if (authUser) {
+          applyAuthUser(authUser);
+        }
+        await refreshSession();
+        return null;
+      } catch (err) {
+        return err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'No se pudo iniciar sesión.';
+      }
     },
-    [hasActiveSubscription, persist, planId],
+    [applyAuthUser, refreshSession],
   );
 
   const register = useCallback(
@@ -110,59 +147,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const normalized = email.trim().toLowerCase();
       if (!normalized.includes('@') || password.length < 4) {
-        return DEMO_HINT;
+        return 'Usá un email válido y una contraseña de al menos 4 caracteres.';
       }
-      await delay(350);
-      const nextUser: User = {
-        email: normalized,
-        name: name.trim(),
-      };
-      setUser(nextUser);
-      setHasActiveSubscription(false);
-      setPlanId(null);
-      await persist({
-        user: nextUser,
-        hasActiveSubscription: false,
-        planId: null,
-      });
-      return null;
+      try {
+        const { user: authUser } = await registerUser({
+          email: normalized,
+          password,
+          displayName: name.trim(),
+        });
+        if (authUser) {
+          applyAuthUser(authUser);
+        }
+        await refreshSession();
+        return null;
+      } catch (err) {
+        return err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'No se pudo crear la cuenta.';
+      }
     },
-    [persist],
+    [applyAuthUser, refreshSession],
   );
 
   const logout = useCallback(async () => {
-    setUser(null);
-    setHasActiveSubscription(false);
-    setPlanId(null);
-    await persist(null);
-  }, [persist]);
-
-  const activateSubscription = useCallback(
-    async (nextPlanId: string) => {
-      setHasActiveSubscription(true);
-      setPlanId(nextPlanId);
-      if (user) {
-        await persist({
-          user,
-          hasActiveSubscription: true,
-          planId: nextPlanId,
-        });
-      }
-    },
-    [persist, user],
-  );
-
-  const cancelSubscription = useCallback(async () => {
-    setHasActiveSubscription(false);
-    setPlanId(null);
-    if (user) {
-      await persist({
-        user,
-        hasActiveSubscription: false,
-        planId: null,
-      });
-    }
-  }, [persist, user]);
+    await clearLocalSession();
+  }, [clearLocalSession]);
 
   const value = useMemo(
     () => ({
@@ -174,8 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
-      activateSubscription,
-      cancelSubscription,
+      refreshSession,
     }),
     [
       user,
@@ -185,8 +195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
-      activateSubscription,
-      cancelSubscription,
+      refreshSession,
     ],
   );
 
@@ -199,17 +208,4 @@ export function useAuth(): AuthContextValue {
     throw new Error('useAuth must be used within AuthProvider');
   }
   return context;
-}
-
-function displayNameFromEmail(email: string): string {
-  const local = email.split('@')[0] ?? 'Fan';
-  return local
-    .split(/[._-]/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -11,6 +11,7 @@ import {
   SourceSans3_700Bold,
 } from '@expo-google-fonts/source-sans-3';
 import { AuthProvider } from './src/context/AuthContext';
+import { CatalogProvider } from './src/context/CatalogContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { colors } from './src/theme/colors';
 
@@ -47,7 +48,9 @@ export default function App() {
     <GestureHandlerRootView style={styles.flex}>
       <SafeAreaProvider>
         <AuthProvider>
-          <RootNavigator />
+          <CatalogProvider>
+            <RootNavigator />
+          </CatalogProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

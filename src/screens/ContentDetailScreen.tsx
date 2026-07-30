@@ -1,10 +1,21 @@
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppButton } from '../components/AppButton';
 import { Screen } from '../components/Screen';
-import { getEpisodeById } from '../data/catalog';
+import type { Episode } from '../data/catalog';
+import { playbackUnavailableLabel } from '../data/catalog';
 import { useAuth } from '../context/AuthContext';
+import { useCatalog } from '../context/CatalogContext';
+import { PREMIUM_ON_HOLD } from '../config/features';
 import { desktopSpacing, useIsDesktopWeb } from '../layout/desktop';
 import { colors } from '../theme/colors';
 import type { RootStackParamList } from '../navigation/types';
@@ -13,27 +24,86 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ContentDetail'>;
 
 export function ContentDetailScreen({ navigation, route }: Props) {
   const { hasActiveSubscription } = useAuth();
+  const { getById, resolveEpisode } = useCatalog();
   const isDesktop = useIsDesktopWeb();
-  const episode = getEpisodeById(route.params.episodeId);
+  const cached = getById(route.params.episodeId);
+  const [episode, setEpisode] = useState<Episode | null>(cached ?? null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(!cached);
+
+  useEffect(() => {
+    let mounted = true;
+    if (cached) {
+      setEpisode(cached);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    void resolveEpisode(route.params.episodeId, route.params.kind)
+      .then((item) => {
+        if (mounted) {
+          setEpisode(item);
+          setError(null);
+        }
+      })
+      .catch((err: unknown) => {
+        if (mounted) {
+          setError(
+            err instanceof Error ? err.message : 'Content not found.',
+          );
+          setEpisode(null);
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setLoading(false);
+        }
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [cached, resolveEpisode, route.params.episodeId, route.params.kind]);
+
+  if (loading) {
+    return (
+      <Screen style={styles.center}>
+        <ActivityIndicator color={colors.accent} size="large" />
+      </Screen>
+    );
+  }
 
   if (!episode) {
     return (
       <Screen>
-        <Text style={styles.missing}>Content not found.</Text>
+        <Text style={styles.missing}>{error ?? 'Content not found.'}</Text>
         <AppButton label="Go back" onPress={() => navigation.goBack()} />
       </Screen>
     );
   }
 
-  const isLocked = episode.isPremium && !hasActiveSubscription;
+  const isLocked =
+    !PREMIUM_ON_HOLD && episode.isPremium && !hasActiveSubscription;
+  const playBlocked = !episode.canPlay;
 
   const onPlay = () => {
+    if (playBlocked) {
+      return;
+    }
     if (isLocked) {
       navigation.navigate('Subscribe');
       return;
     }
-    navigation.navigate('Player', { episodeId: episode.id });
+    navigation.navigate('Player', {
+      episodeId: episode.id,
+      kind: episode.kind,
+    });
   };
+
+  const playLabel = playBlocked
+    ? 'Not ready yet'
+    : isLocked
+      ? 'Unlock with subscription'
+      : 'Play';
 
   const body = (
     <View
@@ -48,20 +118,26 @@ export function ContentDetailScreen({ navigation, route }: Props) {
         {episode.title}
       </Text>
       <Text style={styles.meta}>
-        {episode.durationMinutes} min
-        {episode.isLive ? ' · LIVE' : ''}
-        {episode.isPremium ? ' · Premium' : ' · Free'}
-        {` · ${episode.format.toUpperCase()}`}
+        {episode.durationMinutes > 0 ? `${episode.durationMinutes} min · ` : ''}
+        {episode.isLive ? 'LIVE · ' : ''}
+        {!PREMIUM_ON_HOLD ? (episode.isPremium ? 'Premium' : 'Free') : ''}
+        {!PREMIUM_ON_HOLD ? ` · ${episode.format.toUpperCase()}` : episode.format.toUpperCase()}
       </Text>
       <Text style={styles.delivery}>{episode.deliveryNote}</Text>
       <Text style={styles.description}>{episode.description}</Text>
       {episode.guests?.length ? (
         <Text style={styles.guests}>Guests: {episode.guests.join(', ')}</Text>
       ) : null}
+      {playBlocked ? (
+        <Text style={styles.statusNote}>
+          {playbackUnavailableLabel(episode)}
+        </Text>
+      ) : null}
 
       <AppButton
-        label={isLocked ? 'Unlock with subscription' : 'Play'}
+        label={playLabel}
         onPress={onPlay}
+        disabled={playBlocked}
         style={styles.play}
       />
       <AppButton
@@ -99,6 +175,10 @@ export function ContentDetailScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
+  center: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   cover: {
     width: '100%',
     aspectRatio: 16 / 9,
@@ -171,6 +251,13 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontFamily: 'SourceSans3_400Regular',
     fontSize: 14,
+  },
+  statusNote: {
+    marginTop: 16,
+    color: colors.spotlight,
+    fontFamily: 'SourceSans3_400Regular',
+    fontSize: 14,
+    lineHeight: 20,
   },
   play: {
     marginTop: 24,

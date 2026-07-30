@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -6,14 +6,24 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useEvent, useEventListener } from 'expo';
-import { useVideoPlayer, VideoView, type VideoSource } from 'expo-video';
+import type { VideoSource } from 'expo-video';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppButton } from '../components/AppButton';
-import { getEpisodeById } from '../data/catalog';
+import {
+  ExpoPlayerSurface,
+  type PlayerSurfaceRef,
+} from '../components/ExpoPlayerSurface';
+import type { WebHlsPlayerRef } from '../components/WebHlsPlayer';
+import { WebHlsPlayer } from '../components/WebHlsPlayer';
+import { YouTubePlayer } from '../components/YouTubePlayer';
+import type { Episode } from '../data/catalog';
+import { playbackUnavailableLabel } from '../data/catalog';
+import { ApiError } from '../api/errors';
 import { useAuth } from '../context/AuthContext';
+import { useCatalog } from '../context/CatalogContext';
+import { PREMIUM_ON_HOLD } from '../config/features';
 import { colors } from '../theme/colors';
 import { TVFocusGuide, isTV } from '../tv';
 import type { RootStackParamList } from '../navigation/types';
@@ -36,58 +46,122 @@ const useTVEventHandler: (handler: (event: HWEvent) => void) => void =
     }
   ).useTVEventHandler ?? useTVEventHandlerFallback;
 
+type PlaybackState = {
+  episode: Episode;
+  url: string;
+  format: Episode['format'];
+};
+
 export function PlayerScreen({ navigation, route }: Props) {
-  const episode = getEpisodeById(route.params.episodeId);
   const { hasActiveSubscription } = useAuth();
+  const { getById, resolveEpisode, resolvePlayback } = useCatalog();
   const insets = useSafeAreaInsets();
-  const videoRef = useRef<VideoView>(null);
+  const expoRef = useRef<PlayerSurfaceRef>(null);
+  const webHlsRef = useRef<WebHlsPlayerRef>(null);
+
+  const [episode, setEpisode] = useState<Episode | null>(
+    () => getById(route.params.episodeId) ?? null,
+  );
+  const [playback, setPlayback] = useState<PlaybackState | null>(null);
+  const [bootError, setBootError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [booting, setBooting] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(true);
 
-  const canPlay =
-    !!episode && !(episode.isPremium && !hasActiveSubscription);
+  const useYouTube = playback?.format === 'youtube';
+  const useWebHls =
+    Platform.OS === 'web' && playback?.format === 'hls';
+  const useExpo =
+    !!playback && !useYouTube && !useWebHls;
 
-  const videoSource: VideoSource | null =
-    canPlay && episode
-      ? {
-          uri: episode.videoUrl,
-          contentType: episode.format === 'hls' ? 'hls' : undefined,
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      setBooting(true);
+      setBootError(null);
+      setError(null);
+      setPlayback(null);
+      try {
+        const item =
+          episode ??
+          (await resolveEpisode(route.params.episodeId, route.params.kind));
+        if (!mounted) {
+          return;
         }
-      : null;
+        setEpisode(item);
 
-  const player = useVideoPlayer(videoSource, (instance) => {
-    instance.play();
-  });
+        if (
+          !PREMIUM_ON_HOLD &&
+          item.isPremium &&
+          !hasActiveSubscription
+        ) {
+          setBooting(false);
+          return;
+        }
 
-  const { isPlaying } = useEvent(player, 'playingChange', {
-    isPlaying: player.playing,
-  });
-  const { status } = useEvent(player, 'statusChange', {
-    status: player.status,
-  });
+        const playbackInfo = await resolvePlayback(item);
+        if (!mounted) {
+          return;
+        }
+        const nextEpisode = {
+          ...item,
+          videoUrl: playbackInfo.url,
+          format: playbackInfo.format,
+          isLive: playbackInfo.isLive ?? item.isLive,
+        };
+        setEpisode(nextEpisode);
+        setPlayback({
+          episode: nextEpisode,
+          url: playbackInfo.url,
+          format: playbackInfo.format,
+        });
+      } catch (err) {
+        if (mounted) {
+          const fallback =
+            getById(route.params.episodeId) ?? episode ?? null;
+          setBootError(resolvePlaybackError(err, fallback));
+        }
+      } finally {
+        if (mounted) {
+          setBooting(false);
+        }
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    hasActiveSubscription,
+    resolveEpisode,
+    resolvePlayback,
+    route.params.episodeId,
+    route.params.kind,
+  ]);
 
-  useEventListener(player, 'statusChange', ({ status: nextStatus }) => {
-    if (nextStatus === 'error') {
-      setError(
-        episode?.format === 'hls' && Platform.OS === 'web'
-          ? 'Este HLS no reprodujo en este browser. Probá Safari, o un título MP4 (Highlights).'
-          : 'No se pudo reproducir el video. Revisá la conexión.',
-      );
-    }
-  });
-
-  const isBuffering = status === 'loading' || status === 'idle';
+  const handlePlayerError = useCallback((message: string) => {
+    setError(message.trim() ? message : null);
+  }, []);
 
   const togglePlay = useCallback(() => {
-    if (player.playing) {
-      player.pause();
-    } else {
-      player.play();
+    if (useYouTube) {
+      return;
     }
-  }, [player]);
+    const surface = useWebHls ? webHlsRef.current : expoRef.current;
+    if (isPlaying) {
+      surface?.pause();
+    } else {
+      surface?.play();
+    }
+  }, [isPlaying, useWebHls, useYouTube]);
 
   const enterFullscreen = useCallback(() => {
-    void videoRef.current?.enterFullscreen();
-  }, []);
+    if (useYouTube) {
+      return;
+    }
+    const surface = useWebHls ? webHlsRef.current : expoRef.current;
+    void surface?.enterFullscreen();
+  }, [useWebHls, useYouTube]);
 
   useTVEventHandler(
     useCallback(
@@ -103,16 +177,30 @@ export function PlayerScreen({ navigation, route }: Props) {
     ),
   );
 
-  if (!episode) {
+  if (booting) {
     return (
       <View style={styles.root}>
-        <Text style={styles.error}>Episode unavailable.</Text>
+        <ActivityIndicator color={colors.accent} size="large" />
+      </View>
+    );
+  }
+
+  if (bootError || !episode || !playback) {
+    return (
+      <View style={styles.root}>
+        <Text style={styles.error}>
+          {bootError ?? 'Episode unavailable.'}
+        </Text>
         <AppButton label="Close" onPress={() => navigation.goBack()} />
       </View>
     );
   }
 
-  if (episode.isPremium && !hasActiveSubscription) {
+  if (
+    !PREMIUM_ON_HOLD &&
+    episode.isPremium &&
+    !hasActiveSubscription
+  ) {
     return (
       <View style={styles.root}>
         <Text style={styles.error}>
@@ -133,10 +221,10 @@ export function PlayerScreen({ navigation, route }: Props) {
     );
   }
 
-  const webHlsTip =
-    Platform.OS === 'web' && episode.format === 'hls'
-      ? 'HLS en web: mejor en Safari. En Chrome puede fallar; usá Highlights (MP4) o device nativo.'
-      : null;
+  const expoSource: VideoSource = {
+    uri: playback.url,
+    contentType: playback.format === 'hls' ? 'hls' : undefined,
+  };
 
   return (
     <View style={styles.root}>
@@ -154,8 +242,9 @@ export function PlayerScreen({ navigation, route }: Props) {
           onPress={togglePlay}
           style={styles.close}
           preferredFocus={isTV}
+          disabled={useYouTube}
         />
-        {!isTV ? (
+        {!isTV && !useYouTube ? (
           <AppButton
             label="Fullscreen"
             variant="secondary"
@@ -171,27 +260,35 @@ export function PlayerScreen({ navigation, route }: Props) {
         />
       </TVFocusGuide>
       <View style={styles.playerWrap}>
-        {isBuffering && !error ? (
-          <ActivityIndicator
-            color={colors.accent}
-            size="large"
-            style={styles.spinner}
+        {useYouTube ? (
+          <YouTubePlayer
+            url={playback.url}
+            autoPlay
+            style={styles.video}
+            onError={(msg) => handlePlayerError(msg)}
+            onReady={() => handlePlayerError('')}
+          />
+        ) : useWebHls ? (
+          <WebHlsPlayer
+            ref={webHlsRef}
+            url={playback.url}
+            autoPlay
+            nativeControls={!isTV}
+            style={styles.video}
+            onError={(msg) => handlePlayerError(msg)}
+            onReady={() => handlePlayerError('')}
+            onPlayingChange={setIsPlaying}
+          />
+        ) : useExpo ? (
+          <ExpoPlayerSurface
+            ref={expoRef}
+            source={expoSource}
+            onError={handlePlayerError}
+            onPlayingChange={setIsPlaying}
           />
         ) : null}
-        <VideoView
-          ref={videoRef}
-          style={styles.video}
-          player={player}
-          contentFit="contain"
-          nativeControls={!isTV}
-          fullscreenOptions={{ enable: true }}
-          onFirstFrameRender={() => setError(null)}
-        />
       </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      {webHlsTip && !error ? (
-        <Text style={styles.tvHint}>{webHlsTip}</Text>
-      ) : null}
       {isTV ? (
         <Text style={styles.tvHint}>
           Remote: OK / Play-Pause · Menu to exit
@@ -199,6 +296,19 @@ export function PlayerScreen({ navigation, route }: Props) {
       ) : null}
     </View>
   );
+}
+
+function resolvePlaybackError(err: unknown, episode: Episode | null): string {
+  if (err instanceof ApiError) {
+    if (err.status === 404 && episode) {
+      return playbackUnavailableLabel(episode);
+    }
+    return err.message;
+  }
+  if (err instanceof Error) {
+    return err.message;
+  }
+  return 'No se pudo preparar el playback.';
 }
 
 const styles = StyleSheet.create({
@@ -233,18 +343,11 @@ const styles = StyleSheet.create({
   playerWrap: {
     flex: 1,
     width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   video: {
+    flex: 1,
     width: '100%',
-    height: '100%',
     backgroundColor: '#000',
-  },
-  spinner: {
-    position: 'absolute',
-    alignSelf: 'center',
-    zIndex: 1,
   },
   error: {
     color: colors.spotlight,

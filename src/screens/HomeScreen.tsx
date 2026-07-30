@@ -1,4 +1,5 @@
 import {
+  ActivityIndicator,
   ImageBackground,
   Pressable,
   ScrollView,
@@ -16,12 +17,12 @@ import { AppButton } from '../components/AppButton';
 import { ContentRow } from '../components/ContentRow';
 import { Screen } from '../components/Screen';
 import {
-  categories,
-  episodes,
   getEpisodesByCategory,
+  FALLBACK_THUMB,
   type Episode,
 } from '../data/catalog';
 import { useAuth } from '../context/AuthContext';
+import { useCatalog } from '../context/CatalogContext';
 import { desktopSpacing, useIsDesktopWeb } from '../layout/desktop';
 import { openSubscribeWeb } from '../lib/openSubscribeWeb';
 import { colors } from '../theme/colors';
@@ -35,13 +36,18 @@ type Props = CompositeScreenProps<
 
 export function HomeScreen({ navigation }: Props) {
   const { user, hasActiveSubscription } = useAuth();
+  const { episodes, categories, isLoading, error, refresh } = useCatalog();
   const insets = useSafeAreaInsets();
   const isDesktop = useIsDesktopWeb();
-  const featured = episodes.find((item) => item.isLive) ?? episodes[0];
+  const featured =
+    episodes.find((item) => item.isLive) ?? episodes[0] ?? null;
   const pad = isDesktop ? desktopSpacing.screenPad : 20;
 
   const onSelect = (episode: Episode) => {
-    navigation.navigate('ContentDetail', { episodeId: episode.id });
+    navigation.navigate('ContentDetail', {
+      episodeId: episode.id,
+      kind: episode.kind,
+    });
   };
 
   const onSubscribe = () => {
@@ -53,7 +59,7 @@ export function HomeScreen({ navigation }: Props) {
       <StatusBar style="light" />
       <ScrollView>
         <ImageBackground
-          source={{ uri: featured.thumbnailUrl }}
+          source={{ uri: featured?.thumbnailUrl ?? FALLBACK_THUMB }}
           style={[
             styles.hero,
             isDesktop && styles.heroDesktop,
@@ -74,44 +80,70 @@ export function HomeScreen({ navigation }: Props) {
             <Text style={styles.greeting}>
               Welcome back, {user?.name ?? 'fan'}
             </Text>
-            <Text
-              style={[styles.heroTitle, isDesktop && styles.heroTitleDesktop]}
-            >
-              {featured.title}
-            </Text>
-            <Text
-              style={[styles.heroCopy, isDesktop && styles.heroCopyDesktop]}
-              numberOfLines={isDesktop ? 4 : 3}
-            >
-              {featured.description}
-            </Text>
-            <TVFocusGuide autoFocus={!isTV}>
-              <View style={styles.heroActions}>
-                <AppButton
-                  label={featured.isLive ? 'Watch Live' : 'Play Featured'}
-                  onPress={() => onSelect(featured)}
-                  style={styles.cta}
-                  preferredFocus
-                />
-                {!hasActiveSubscription ? (
-                  <Pressable
-                    accessibilityRole="link"
-                    accessibilityLabel="Subscribe on the web"
-                    onPress={onSubscribe}
-                    style={({ pressed }) => [
-                      styles.subscribeLink,
-                      pressed && styles.subscribeLinkPressed,
-                    ]}
-                  >
-                    <Text style={styles.subscribeLinkText}>
-                      Membership · from web
-                    </Text>
-                  </Pressable>
+            {featured ? (
+              <>
+                <Text
+                  style={[
+                    styles.heroTitle,
+                    isDesktop && styles.heroTitleDesktop,
+                  ]}
+                >
+                  {featured.title}
+                </Text>
+                <Text
+                  style={[styles.heroCopy, isDesktop && styles.heroCopyDesktop]}
+                  numberOfLines={isDesktop ? 4 : 3}
+                >
+                  {featured.description}
+                </Text>
+                <TVFocusGuide autoFocus={!isTV}>
+                  <View style={styles.heroActions}>
+                    <AppButton
+                      label={featured.isLive ? 'Watch Live' : 'Play Featured'}
+                      onPress={() => onSelect(featured)}
+                      style={styles.cta}
+                      preferredFocus
+                    />
+                    {!hasActiveSubscription ? (
+                      <Pressable
+                        accessibilityRole="link"
+                        accessibilityLabel="Subscribe on the web"
+                        onPress={onSubscribe}
+                        style={({ pressed }) => [
+                          styles.subscribeLink,
+                          pressed && styles.subscribeLinkPressed,
+                        ]}
+                      >
+                        <Text style={styles.subscribeLinkText}>
+                          Membership · from web
+                        </Text>
+                      </Pressable>
+                    ) : (
+                      <Text style={styles.memberBadge}>
+                        Member access active
+                      </Text>
+                    )}
+                  </View>
+                </TVFocusGuide>
+              </>
+            ) : (
+              <View style={styles.emptyHero}>
+                {isLoading ? (
+                  <ActivityIndicator color={colors.accent} />
                 ) : (
-                  <Text style={styles.memberBadge}>Member access active</Text>
+                  <>
+                    <Text style={styles.heroTitle}>
+                      {error ? 'Catalog unavailable' : 'No titles yet'}
+                    </Text>
+                    <Text style={styles.heroCopy}>
+                      {error ??
+                        'Videos and live events will appear here when published.'}
+                    </Text>
+                    <AppButton label="Retry" onPress={() => void refresh()} />
+                  </>
                 )}
               </View>
-            </TVFocusGuide>
+            )}
           </LinearGradient>
         </ImageBackground>
 
@@ -119,7 +151,7 @@ export function HomeScreen({ navigation }: Props) {
           <ContentRow
             key={category}
             title={category}
-            episodes={getEpisodesByCategory(category)}
+            episodes={getEpisodesByCategory(episodes, category)}
             onSelect={onSelect}
             preferredFocusFirst={isTV && index === 0}
           />
@@ -201,6 +233,11 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 18,
     flexWrap: 'wrap',
+  },
+  emptyHero: {
+    marginTop: 8,
+    gap: 12,
+    maxWidth: 480,
   },
   cta: {
     minWidth: 140,

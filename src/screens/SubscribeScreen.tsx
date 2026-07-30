@@ -1,5 +1,7 @@
+import { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppButton } from '../components/AppButton';
 import { Screen } from '../components/Screen';
@@ -15,9 +17,24 @@ export function SubscribeScreen({ navigation }: Props) {
     user,
     hasActiveSubscription,
     planId,
-    activateSubscription,
-    cancelSubscription,
+    refreshSession,
   } = useAuth();
+  const [refreshing, setRefreshing] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshSession().catch(() => undefined);
+    }, [refreshSession]),
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshSession();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   return (
     <Screen>
@@ -26,8 +43,8 @@ export function SubscribeScreen({ navigation }: Props) {
         <Text style={styles.brand}>STU & LAURIE+</Text>
         <Text style={styles.title}>Subscribe</Text>
         <Text style={styles.copy}>
-          Membership is billed on the web (WordPress checkout). Register once,
-          then complete payment securely outside the app stores.
+          Membership is billed on the web (WordPress checkout). After payment,
+          the backend unlocks streaming via the WooCommerce webhook.
         </Text>
 
         {hasActiveSubscription ? (
@@ -38,9 +55,9 @@ export function SubscribeScreen({ navigation }: Props) {
               premium library.
             </Text>
             <AppButton
-              label="Cancel (mock)"
+              label="Manage on web"
               variant="secondary"
-              onPress={cancelSubscription}
+              onPress={() => void openSubscribeWeb(user?.email)}
             />
           </View>
         ) : (
@@ -48,9 +65,8 @@ export function SubscribeScreen({ navigation }: Props) {
             <Text style={styles.planName}>Monthly</Text>
             <Text style={styles.planPrice}>$11.50</Text>
             <Text style={styles.planDesc}>
-              Full library and live access. You will create your billing profile
-              on our subscribe page, then finish payment on the official
-              checkout.
+              Full library and live access. Create your billing profile on our
+              subscribe page, then finish payment on the official checkout.
             </Text>
             <AppButton
               label="Continue on web"
@@ -58,9 +74,10 @@ export function SubscribeScreen({ navigation }: Props) {
               style={styles.planCta}
             />
             <AppButton
-              label="Demo unlock (local only)"
+              label={refreshing ? 'Checking…' : 'I already paid — refresh'}
               variant="ghost"
-              onPress={() => activateSubscription('monthly')}
+              onPress={onRefresh}
+              disabled={refreshing}
             />
           </View>
         )}

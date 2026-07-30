@@ -15,6 +15,7 @@
     "expo-linear-gradient": "~57.0.1",
     "expo-status-bar": "~57.0.1",
     "expo-video": "~57.0.1",
+    "hls.js": "^1.6.16",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "npm:react-native-tvos@0.86-stable",
@@ -27,6 +28,7 @@
     "@react-native-tvos/config-tv": "^0.1.6",
     "@types/react": "~19.2.2",
     "cross-env": "^10.1.0",
+    "http-proxy-middleware": "^3.0.7",
     "typescript": "~6.0.3"
   },
   "scripts": {

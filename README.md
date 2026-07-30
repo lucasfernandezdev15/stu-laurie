@@ -8,16 +8,30 @@ Cliente Expo / React Native TV (`react-native-tvos`) para **iOS, Android, Web, A
 | --- | --- |
 | iOS / Android / Web | Cerrado |
 | Apple TV / Android TV | **Capa foco D-Pad lista** (requiere prebuild TV + emulator/device) |
-| Backend / USIO / video CDN | Integración posterior |
-| Subscribe web (Next → Woo) | Scaffold en `web-subscribe/` |
+| Backend / USIO / video CDN | Auth + catálogo + playback cableados a API |
+| Subscribe web (Next → Woo) | Register/login real → checkout Woo |
 
 ## Flujo
 
-- Login / registro (sesión persistente)
-- Home + Library + Account
-- Detalle + gate premium + player
-- Suscripción: link sutil en Home → página Next → checkout Woo (`?add-to-cart=1928`)
+- Login / registro vía `POST /api/auth/*` (tokens + `GET /api/auth/me`)
+- Home + Library desde `GET /api/videos` + `GET /api/live-events`
+- Player: `GET .../playback` (URL firmada)
+- Suscripción: web Next → register API → checkout Woo (`?add-to-cart=1928`)
 - **TV:** rail lateral + anillos de foco + remote play/pause/menu
+
+## Config API
+
+```bash
+# .env (raíz Expo)
+EXPO_PUBLIC_API_URL=http://localhost:3001
+EXPO_PUBLIC_SUBSCRIBE_WEB_URL=https://stu-suscription.vercel.app/subscribe
+```
+
+```bash
+# web-subscribe/.env
+NEXT_PUBLIC_API_URL=http://localhost:3001
+NEXT_PUBLIC_WOO_CHECKOUT_URL=https://thestuandlaurievarietyhour.com/checkout/?add-to-cart=1928
+```
 
 ## Deploy web (desktop) en Vercel
 
@@ -25,11 +39,10 @@ Cliente Expo / React Native TV (`react-native-tvos`) para **iOS, Android, Web, A
 2. En [vercel.com/new](https://vercel.com/new) → Importá el repo.
 3. **Root Directory:** dejar vacío (raíz del repo).
 4. Vercel usa `vercel.json`: build `expo export -p web` → output `dist`.
-5. Deploy → te da un link tipo `https://stu-laurie-streaming.vercel.app`.
+5. Setear `EXPO_PUBLIC_API_URL` en Vercel (staging/prod).
+6. Deploy → te da un link tipo `https://stu-laurie-streaming.vercel.app`.
 
-Login demo: email válido + password ≥ 4 caracteres.
-
-> La página de suscripción (`web-subscribe`) es **otro** proyecto en Vercel, con Root Directory = `web-subscribe`.
+> La página de suscripción (`web-subscribe`) es **otro** proyecto en Vercel, con Root Directory = `web-subscribe` y `NEXT_PUBLIC_API_URL`.
 
 ## Subscribe web (Vercel)
 
@@ -56,7 +69,7 @@ npm run web
 npm start
 ```
 
-Demo: `fan@varietyhour.demo` / `demo`
+Login con una cuenta real del backend (ya no hay demo local).
 
 ### Preview del chrome TV en web
 

@@ -11,7 +11,7 @@ export type MainTabParamList = {
 
 export type RootStackParamList = {
   MainTabs: undefined;
-  ContentDetail: { episodeId: string };
-  Player: { episodeId: string };
+  ContentDetail: { episodeId: string; kind?: 'video' | 'live' };
+  Player: { episodeId: string; kind?: 'video' | 'live' };
   Subscribe: undefined;
 };

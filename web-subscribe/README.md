@@ -1,16 +1,14 @@
 # Stu & Laurie — web subscribe bridge
 
-Mini app **Next.js** para Vercel: registro local → redirect al checkout WooCommerce/USIO.
+Mini app **Next.js** para Vercel: register/login en la API → redirect al checkout WooCommerce/USIO.
 
 ## Flujo
 
 1. Usuario abre `/subscribe` (desde la app o el browser).
-2. Completa nombre, email y password (MVP: se guarda en `localStorage` + `ref` UUID).
+2. Completa nombre, email y password → `POST /api/auth/register` (o login si ya existe).
 3. Redirect a  
    `https://thestuandlaurievarietyhour.com/checkout/?add-to-cart=1928&ref=…&sl_email=…`
-4. Paga en WordPress (tarjeta USIO).
-
-> WordPress aún **no** lee `ref`. Falta el snippet/plugin mínimo (guardar meta + webhook) para activar la app.
+4. Paga en WordPress (tarjeta USIO) → webhook Woo actualiza entitlement en el backend.
 
 ## Local
 
@@ -25,7 +23,7 @@ Abrí [http://localhost:3000/subscribe](http://localhost:3000/subscribe).
 ## Vercel
 
 1. Importá la carpeta `web-subscribe` (o el monorepo con Root Directory = `web-subscribe`).
-2. Seteá `NEXT_PUBLIC_WOO_CHECKOUT_URL` si hace falta.
+2. Seteá `NEXT_PUBLIC_API_URL` y `NEXT_PUBLIC_WOO_CHECKOUT_URL`.
 3. En la app Expo: `EXPO_PUBLIC_SUBSCRIBE_WEB_URL=https://TU-PROYECTO.vercel.app/subscribe`
 
 ## Env

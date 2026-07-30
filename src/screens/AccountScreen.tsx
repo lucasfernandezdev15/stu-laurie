@@ -1,5 +1,7 @@
+import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { useFocusEffect } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -17,9 +19,33 @@ type Props = CompositeScreenProps<
 >;
 
 export function AccountScreen({ navigation }: Props) {
-  const { user, hasActiveSubscription, planId, logout } = useAuth();
+  const {
+    user,
+    hasActiveSubscription,
+    planId,
+    logout,
+    refreshSession,
+  } = useAuth();
   const isDesktop = useIsDesktopWeb();
   const pad = isDesktop ? desktopSpacing.screenPad : 20;
+  const [refreshing, setRefreshing] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshSession().catch(() => undefined);
+    }, [refreshSession]),
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshSession();
+    } catch {
+      // keep current UI; API errors surface on next login if session dies
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   return (
     <Screen
@@ -49,14 +75,20 @@ export function AccountScreen({ navigation }: Props) {
           style={styles.cta}
         />
         <AppButton
+          label={refreshing ? 'Refreshing…' : 'Refresh status'}
+          variant="ghost"
+          onPress={onRefresh}
+          disabled={refreshing}
+        />
+        <AppButton
           label="Subscription details"
           variant="ghost"
           onPress={() => navigation.navigate('Subscribe')}
         />
       </View>
       <Text style={styles.note}>
-        Billing opens in the browser. App access unlocks after payment sync is
-        wired to the backend.
+        Billing opens in the browser. Membership unlocks after WooCommerce
+        syncs with the backend (webhook).
       </Text>
       <AppButton label="Sign out" variant="secondary" onPress={logout} />
     </Screen>

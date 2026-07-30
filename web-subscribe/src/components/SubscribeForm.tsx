@@ -1,11 +1,80 @@
 'use client';
 
 import { useMemo, useState, type FormEvent } from 'react';
-import { STORAGE_KEY, WOO_CHECKOUT_URL } from '@/lib/config';
+import { API_BASE_URL, STORAGE_KEY, WOO_CHECKOUT_URL } from '@/lib/config';
 
 type Props = {
   initialEmail?: string;
 };
+
+async function registerOrLogin(input: {
+  name: string;
+  email: string;
+  password: string;
+}): Promise<void> {
+  if (!API_BASE_URL) {
+    throw new Error('Missing NEXT_PUBLIC_API_URL for auth.');
+  }
+
+  const registerRes = await fetch(`${API_BASE_URL}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      email: input.email,
+      password: input.password,
+      displayName: input.name,
+    }),
+  });
+
+  if (registerRes.ok || registerRes.status === 201) {
+    return;
+  }
+
+  // Account may already exist — try login so checkout can continue.
+  if (registerRes.status === 409 || registerRes.status === 400) {
+    const loginRes = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        email: input.email,
+        password: input.password,
+      }),
+    });
+    if (loginRes.ok || loginRes.status === 201) {
+      return;
+    }
+    const loginBody = await loginRes.json().catch(() => null);
+    throw new Error(
+      messageFromBody(loginBody) ||
+        'Could not sign in with that email/password.',
+    );
+  }
+
+  const body = await registerRes.json().catch(() => null);
+  throw new Error(
+    messageFromBody(body) || `Register failed (${registerRes.status}).`,
+  );
+}
+
+function messageFromBody(body: unknown): string | null {
+  if (!body || typeof body !== 'object') {
+    return null;
+  }
+  const data = body as { message?: string | string[]; error?: string };
+  if (Array.isArray(data.message)) {
+    return data.message.filter(Boolean).join(' ') || null;
+  }
+  if (typeof data.message === 'string') {
+    return data.message;
+  }
+  if (typeof data.error === 'string') {
+    return data.error;
+  }
+  return null;
+}
 
 export function SubscribeForm({ initialEmail = '' }: Props) {
   const [name, setName] = useState('');
@@ -23,7 +92,7 @@ export function SubscribeForm({ initialEmail = '' }: Props) {
     }
   }, []);
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
 
@@ -50,28 +119,35 @@ export function SubscribeForm({ initialEmail = '' }: Props) {
         ? crypto.randomUUID()
         : `ref_${Date.now()}`;
 
-    // MVP: local pending profile until a real backend exists.
-    // WordPress still needs a small hook to persist `ref` on the order.
     try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          ref,
-          name: trimmedName,
-          email: trimmedEmail,
-          createdAt: new Date().toISOString(),
-        }),
-      );
-    } catch {
-      // Private mode / blocked storage — still continue to checkout.
+      await registerOrLogin({
+        name: trimmedName,
+        email: trimmedEmail,
+        password,
+      });
+
+      try {
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            ref,
+            name: trimmedName,
+            email: trimmedEmail,
+            createdAt: new Date().toISOString(),
+          }),
+        );
+      } catch {
+        // Private mode / blocked storage — still continue to checkout.
+      }
+
+      const target = new URL(WOO_CHECKOUT_URL);
+      target.searchParams.set('ref', ref);
+      target.searchParams.set('sl_email', trimmedEmail);
+      window.location.assign(target.toString());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create account.');
+      setSubmitting(false);
     }
-
-    const target = new URL(WOO_CHECKOUT_URL);
-    target.searchParams.set('ref', ref);
-    // Hint for future WP prefill; ignored by stock Woo unless customised.
-    target.searchParams.set('sl_email', trimmedEmail);
-
-    window.location.assign(target.toString());
   }
 
   return (
@@ -126,7 +202,7 @@ export function SubscribeForm({ initialEmail = '' }: Props) {
         disabled={submitting}
         className="mt-2 min-h-12 bg-accent px-5 font-semibold tracking-wide text-[#14110a] transition enabled:hover:brightness-105 enabled:active:scale-[0.99] disabled:opacity-60"
       >
-        {submitting ? 'Redirecting…' : 'Continue to payment'}
+        {submitting ? 'Creating account…' : 'Continue to payment'}
       </button>
 
       <p className="text-sm leading-relaxed text-muted">
