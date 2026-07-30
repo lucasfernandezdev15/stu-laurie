@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -48,61 +48,69 @@ export function AccountScreen({ navigation }: Props) {
   };
 
   return (
-    <Screen
-      style={[
-        styles.root,
-        { paddingHorizontal: pad },
-        isDesktop && styles.rootDesktop,
-      ]}
-    >
+    <Screen style={isDesktop && styles.rootDesktop}>
       <StatusBar style="light" />
-      <Text style={styles.title}>Account</Text>
-      <View style={styles.card}>
-        <Text style={styles.label}>Signed in as</Text>
-        <Text style={styles.value}>{user?.name}</Text>
-        <Text style={styles.email}>{user?.email}</Text>
-      </View>
-      <View style={styles.card}>
-        <Text style={styles.label}>Subscription</Text>
-        <Text style={styles.value}>
-          {hasActiveSubscription
-            ? `Active · ${planId ?? 'plan'}`
-            : 'Inactive'}
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingHorizontal: pad },
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={styles.title}>Account</Text>
+        <View style={styles.card}>
+          <Text style={styles.label}>Signed in as</Text>
+          <Text style={styles.value}>{user?.name}</Text>
+          <Text style={styles.email}>{user?.email}</Text>
+          <AppButton
+            label="Sign out"
+            variant="secondary"
+            onPress={() => void logout()}
+            style={styles.signOut}
+          />
+        </View>
+        <View style={styles.card}>
+          <Text style={styles.label}>Subscription</Text>
+          <Text style={styles.value}>
+            {hasActiveSubscription
+              ? `Active · ${planId ?? 'plan'}`
+              : 'Inactive'}
+          </Text>
+          <AppButton
+            label={hasActiveSubscription ? 'Manage on web' : 'Subscribe on web'}
+            onPress={() => void openSubscribeWeb(user?.email)}
+            style={styles.cta}
+          />
+          <AppButton
+            label={refreshing ? 'Refreshing…' : 'Refresh status'}
+            variant="ghost"
+            onPress={onRefresh}
+            disabled={refreshing}
+          />
+          <AppButton
+            label="Subscription details"
+            variant="ghost"
+            onPress={() => navigation.navigate('Subscribe')}
+          />
+        </View>
+        <Text style={styles.note}>
+          Billing opens in the browser. Membership unlocks after WooCommerce
+          syncs with the backend (webhook).
         </Text>
-        <AppButton
-          label={hasActiveSubscription ? 'Manage on web' : 'Subscribe on web'}
-          onPress={() => void openSubscribeWeb(user?.email)}
-          style={styles.cta}
-        />
-        <AppButton
-          label={refreshing ? 'Refreshing…' : 'Refresh status'}
-          variant="ghost"
-          onPress={onRefresh}
-          disabled={refreshing}
-        />
-        <AppButton
-          label="Subscription details"
-          variant="ghost"
-          onPress={() => navigation.navigate('Subscribe')}
-        />
-      </View>
-      <Text style={styles.note}>
-        Billing opens in the browser. Membership unlocks after WooCommerce
-        syncs with the backend (webhook).
-      </Text>
-      <AppButton label="Sign out" variant="secondary" onPress={logout} />
+      </ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    paddingTop: 8,
-  },
   rootDesktop: {
     maxWidth: 560,
     width: '100%',
     alignSelf: 'flex-start',
+  },
+  content: {
+    paddingTop: 8,
+    paddingBottom: 32,
   },
   title: {
     fontFamily: 'BebasNeue_400Regular',
@@ -134,6 +142,9 @@ const styles = StyleSheet.create({
     fontFamily: 'SourceSans3_400Regular',
     fontSize: 14,
   },
+  signOut: {
+    marginTop: 16,
+  },
   cta: {
     marginTop: 14,
   },
@@ -142,6 +153,6 @@ const styles = StyleSheet.create({
     fontFamily: 'SourceSans3_400Regular',
     fontSize: 13,
     lineHeight: 18,
-    marginBottom: 18,
+    marginBottom: 8,
   },
 });
