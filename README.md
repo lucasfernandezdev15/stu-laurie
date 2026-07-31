@@ -79,6 +79,46 @@ npm run web:tv
 
 Fuerza `EXPO_PUBLIC_FORCE_TV=1` (rail + tamaños TV sin emulador).
 
+## APK local (Android + Android TV)
+
+Los binarios salen en `dist/`. Requiere `.env` (copiá `.env.example`), JDK 17 y Android SDK.
+
+```bash
+npm run apk:phone     # dist/stu-laurie-streaming-release.apk
+npm run apk:tv        # dist/stu-laurie-streaming-androidtv-release.apk
+```
+
+Si **solo cambió código JS/TS** desde el último build del mismo target:
+
+```bash
+npm run apk:phone:js
+npm run apk:tv:js
+```
+
+### Tiempos medidos (8 núcleos / 14 GB)
+
+| Escenario | Tiempo |
+| --- | --- |
+| Clean completo (cambia de phone ↔ TV, o primera vez) | ~27 min |
+| Full build reusando nativos del mismo target | pocos min |
+| `:js` — solo rebundlea JS y reempaqueta | **~40 s** |
+
+El costo casi entero está en el `expo prebuild --clean`, que borra `android/` y
+obliga a recompilar C++ (CMake/NDK) desde cero. Por eso el script **solo limpia
+cuando cambiás de target**; forzalo con `--clean` si hace falta.
+
+Cortar de 4 a 2 ABIs **no** bajó el tiempo del clean build: Gradle compila las
+arquitecturas en paralelo y la máquina tiene núcleos de sobra. Sirve igual para
+bajar el tamaño del APK. Si necesitás emuladores x86: `npm run apk:phone:all-abis`.
+
+Otros ajustes: daemon de Gradle + `--build-cache`, lint de release excluido
+(`--lint` para reactivarlo), y `org.gradle.caching` / heap de 4 GB / Kotlin
+incremental en `~/.gradle/gradle.properties` — va ahí porque el
+`gradle.properties` del proyecto lo regenera cada prebuild.
+
+El script guarda el target en `android/.build-target` y aborta si intentás reusar
+nativos generados para el otro target.
+
 ## Build TV (Apple TV / Android TV)
 
 Requiere [dev client / prebuild](https://docs.expo.dev/guides/building-for-tv/) — **no corre en Expo Go**.
@@ -100,7 +140,22 @@ Volver a phone:
 npm run prebuild
 ```
 
-Perfiles EAS: `development_tv` / `preview_tv` en `eas.json`.
+## Build en la nube (EAS)
+
+Compila en servidores de Expo — **única vía para iOS / tvOS desde Windows**.
+
+```bash
+npx eas-cli login
+
+npm run cloud:android      # APK Android
+npm run cloud:androidtv    # APK Android TV
+npm run cloud:ios          # iOS (requiere Apple Developer, USD 99/año)
+npm run cloud:appletv      # tvOS
+```
+
+Perfiles en `eas.json`: `preview*` para pruebas internas, `production*` para store
+(`.aab`). Todos heredan de `base`, que inyecta `EXPO_PUBLIC_API_URL` y
+`EXPO_PUBLIC_SUBSCRIBE_WEB_URL` — sin eso el build sale sin backend.
 
 ## Capas TV en código
 

@@ -41,7 +41,17 @@
     "prebuild": "expo prebuild --clean",
     "prebuild:tv": "cross-env EXPO_TV=1 expo prebuild --clean",
     "run:android:tv": "cross-env EXPO_TV=1 expo run:android",
-    "run:ios:tv": "cross-env EXPO_TV=1 expo run:ios"
+    "run:ios:tv": "cross-env EXPO_TV=1 expo run:ios",
+    "apk:phone": "node scripts/build-android.mjs",
+    "apk:tv": "node scripts/build-android.mjs --tv",
+    "apk:phone:js": "node scripts/build-android.mjs --js-only",
+    "apk:tv:js": "node scripts/build-android.mjs --tv --js-only",
+    "apk:phone:all-abis": "node scripts/build-android.mjs --all-abis",
+    "apk:tv:all-abis": "node scripts/build-android.mjs --tv --all-abis",
+    "cloud:android": "eas build -p android --profile preview",
+    "cloud:androidtv": "eas build -p android --profile preview_tv",
+    "cloud:ios": "eas build -p ios --profile preview",
+    "cloud:appletv": "eas build -p ios --profile preview_tv"
   },
   "expo": {
     "install": {
