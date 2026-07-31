@@ -2,25 +2,36 @@
 /**
  * Local Android release builds (phone and TV).
  *
- * Native (CMake/NDK) compilation dominates the build, so by default we only
- * build the ABIs that ship on real devices — x86/x86_64 exist for emulators.
+ * `expo prebuild` always wipes android/ (the folder is gitignored, so Expo
+ * treats it as disposable), which throws away ~27 min of C++/Kotlin output.
+ * The only cheap path is to not run prebuild at all, so we keep one native
+ * directory per target under .native-cache/ and swap them when switching.
  *
- * A full `--clean` prebuild costs ~27 min because it discards every native build
- * output. We only clean when switching between the phone and TV targets, since
- * that is the one case where stale native config would produce a wrong APK.
+ * Prebuild is only required when the native config actually changes: app.json,
+ * config plugins, native dependencies, or an Expo upgrade. Pass --clean then.
  *
  * Usage:
- *   node scripts/build-android.mjs [--tv] [--js-only] [--clean] [--all-abis] [--abi=a,b] [--lint]
+ *   node scripts/build-android.mjs [--tv] [--clean] [--all-abis] [--abi=a,b] [--lint]
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const androidDir = join(root, 'android');
 const targetMarker = join(androidDir, '.build-target');
+const cacheRoot = join(root, '.native-cache');
+const cacheDirFor = (name) => join(cacheRoot, `android-${name}`);
 
 const argv = process.argv.slice(2);
 const hasFlag = (name) => argv.includes(`--${name}`);
@@ -30,7 +41,6 @@ const flagValue = (name) => {
 };
 
 const isTV = hasFlag('tv');
-const jsOnly = hasFlag('js-only');
 const forceClean = hasFlag('clean');
 const runLint = hasFlag('lint');
 const target = isTV ? 'tv' : 'phone';
@@ -81,6 +91,29 @@ function run(command, args, cwd = root) {
   }
 }
 
+const gradlew = process.platform === 'win32' ? 'gradlew.bat' : './gradlew';
+
+/** Renames fail while the Gradle daemon holds locks inside android/. */
+function moveDir(from, to) {
+  try {
+    renameSync(from, to);
+  } catch {
+    console.log('Directory is locked — stopping the Gradle daemon and retrying.');
+    spawnSync(gradlew, ['--stop'], { cwd: androidDir, stdio: 'inherit', shell: true });
+    renameSync(from, to);
+  }
+}
+
+function stashNative(current) {
+  const slot = cacheDirFor(current);
+  mkdirSync(cacheRoot, { recursive: true });
+  if (existsSync(slot)) {
+    rmSync(slot, { recursive: true, force: true });
+  }
+  moveDir(androidDir, slot);
+  console.log(`Cached the ${current} native build in .native-cache/`);
+}
+
 loadDotEnv();
 
 if (!process.env.EXPO_PUBLIC_API_URL) {
@@ -94,35 +127,35 @@ if (!process.env.EXPO_PUBLIC_API_URL) {
 const currentTarget = existsSync(targetMarker)
   ? readFileSync(targetMarker, 'utf8').trim()
   : null;
-const matchesTarget = currentTarget === target;
 
-if (jsOnly) {
-  if (!matchesTarget) {
-    console.error(
-      `Cannot reuse android/ — it was generated for "${currentTarget ?? 'unknown'}" ` +
-        `but you asked for "${target}". Run the full build once.`,
-    );
-    process.exit(1);
-  }
-  console.log(`Reusing existing android/ (${target}) — skipping prebuild.`);
+let needsPrebuild = false;
+
+if (forceClean) {
+  needsPrebuild = true;
+} else if (currentTarget === target) {
+  console.log(`Reusing the ${target} native build already in android/.`);
 } else {
-  const clean = forceClean || !matchesTarget;
-  const args = ['expo', 'prebuild', '--platform', 'android'];
-  if (clean) {
-    args.push('--clean');
-    console.log(
-      currentTarget && !matchesTarget
-        ? `Switching ${currentTarget} -> ${target}: native code must be regenerated.`
-        : 'Clean prebuild.',
-    );
-  } else {
-    console.log(`Reusing native build outputs for ${target}.`);
+  if (currentTarget) {
+    stashNative(currentTarget);
+  } else if (existsSync(androidDir)) {
+    rmSync(androidDir, { recursive: true, force: true });
   }
-  run('npx', args);
+
+  const slot = cacheDirFor(target);
+  if (existsSync(slot)) {
+    moveDir(slot, androidDir);
+    console.log(`Restored the ${target} native build from .native-cache/`);
+  } else {
+    needsPrebuild = true;
+  }
+}
+
+if (needsPrebuild) {
+  console.log(`Generating native code for ${target} — this takes ~25 min the first time.`);
+  run('npx', ['expo', 'prebuild', '--clean', '--platform', 'android']);
   writeFileSync(targetMarker, target);
 }
 
-const gradlew = process.platform === 'win32' ? 'gradlew.bat' : './gradlew';
 const startedAt = Date.now();
 
 const gradleArgs = [
@@ -144,8 +177,7 @@ if (!existsSync(apk)) {
 }
 
 mkdirSync(join(root, 'dist'), { recursive: true });
-const destination = join(root, 'dist', outputName);
-copyFileSync(apk, destination);
+copyFileSync(apk, join(root, 'dist', outputName));
 
 const minutes = ((Date.now() - startedAt) / 60000).toFixed(1);
 console.log(`\nAPK ready: dist/${outputName}`);

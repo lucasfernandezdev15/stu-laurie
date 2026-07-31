@@ -88,36 +88,35 @@ npm run apk:phone     # dist/stu-laurie-streaming-release.apk
 npm run apk:tv        # dist/stu-laurie-streaming-androidtv-release.apk
 ```
 
-Si **solo cambió código JS/TS** desde el último build del mismo target:
-
-```bash
-npm run apk:phone:js
-npm run apk:tv:js
-```
+Corré `apk:phone:clean` / `apk:tv:clean` **solo** cuando cambia la config nativa:
+`app.json`, config plugins, dependencias nativas o upgrade de Expo.
 
 ### Tiempos medidos (8 núcleos / 14 GB)
 
 | Escenario | Tiempo |
 | --- | --- |
-| Clean completo (cambia de phone ↔ TV, o primera vez) | ~27 min |
-| Full build reusando nativos del mismo target | pocos min |
-| `:js` — solo rebundlea JS y reempaqueta | **~40 s** |
+| Primera vez de cada target (o `:clean`) | ~27 min |
+| Cambios de JS/TS, mismo target | **~40 s** |
+| Switch phone ↔ TV con ambos cacheados | **~40 s** |
 
-El costo casi entero está en el `expo prebuild --clean`, que borra `android/` y
-obliga a recompilar C++ (CMake/NDK) desde cero. Por eso el script **solo limpia
-cuando cambiás de target**; forzalo con `--clean` si hace falta.
+### Por qué
+
+`expo prebuild` **siempre** borra `android/` — como la carpeta está en
+`.gitignore`, Expo la trata como descartable, con o sin `--clean`. Eso tira ~27 min
+de compilación C++/Kotlin. La única salida barata es no correr prebuild.
+
+El script guarda una carpeta nativa por target en `.native-cache/` (~1 GB cada una)
+y las intercambia al cambiar de target, así Gradle solo rehace el bundle JS y el
+empaquetado. El target activo queda anotado en `android/.build-target`.
 
 Cortar de 4 a 2 ABIs **no** bajó el tiempo del clean build: Gradle compila las
-arquitecturas en paralelo y la máquina tiene núcleos de sobra. Sirve igual para
-bajar el tamaño del APK. Si necesitás emuladores x86: `npm run apk:phone:all-abis`.
+arquitecturas en paralelo y sobran núcleos. Sí bajó el APK de 83 MB a 47 MB.
+Si necesitás emuladores x86: `npm run apk:phone:all-abis`.
 
 Otros ajustes: daemon de Gradle + `--build-cache`, lint de release excluido
 (`--lint` para reactivarlo), y `org.gradle.caching` / heap de 4 GB / Kotlin
 incremental en `~/.gradle/gradle.properties` — va ahí porque el
 `gradle.properties` del proyecto lo regenera cada prebuild.
-
-El script guarda el target en `android/.build-target` y aborta si intentás reusar
-nativos generados para el otro target.
 
 ## Build TV (Apple TV / Android TV)
 
