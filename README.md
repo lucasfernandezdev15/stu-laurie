@@ -96,8 +96,12 @@ Corré `apk:phone:clean` / `apk:tv:clean` **solo** cuando cambia la config nativ
 | Escenario | Tiempo |
 | --- | --- |
 | Primera vez de cada target (o `:clean`) | ~27 min |
-| Cambios de JS/TS, mismo target | **~40 s** |
-| Switch phone ↔ TV con ambos cacheados | **~40 s** |
+| Cambios de JS/TS, mismo target | **~40 s – 4 min** |
+| Switch phone ↔ TV con ambos cacheados | **~4–5 min** |
+
+El switch no es instantáneo: hay que mover ~1 GB de nativos (en Windows
+`rename` suele fallar con `EPERM`, así que usa `robocopy /MOVE`) y Gradle
+reconfigura el proyecto. Sigue siendo ~5× más rápido que un clean.
 
 ### Por qué
 

@@ -16,6 +16,7 @@
 
 import { spawnSync } from 'node:child_process';
 import {
+  cpSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -93,23 +94,67 @@ function run(command, args, cwd = root) {
 
 const gradlew = process.platform === 'win32' ? 'gradlew.bat' : './gradlew';
 
-/** Renames fail while the Gradle daemon holds locks inside android/. */
-function moveDir(from, to) {
-  try {
-    renameSync(from, to);
-  } catch {
-    console.log('Directory is locked — stopping the Gradle daemon and retrying.');
-    spawnSync(gradlew, ['--stop'], { cwd: androidDir, stdio: 'inherit', shell: true });
-    renameSync(from, to);
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function stopGradleDaemon(cwd) {
+  if (!existsSync(join(cwd, process.platform === 'win32' ? 'gradlew.bat' : 'gradlew'))) {
+    return;
   }
+  console.log('Stopping the Gradle daemon so the native folder can be moved.');
+  spawnSync(gradlew, ['--stop'], { cwd, stdio: 'inherit', shell: true });
+  sleep(1500);
+}
+
+/**
+ * On Windows, rename often fails (EPERM) while something still holds the folder.
+ * Prefer rename; on Windows fall back to robocopy /MOVE so timestamps survive
+ * (a plain copy dirties Gradle and turns a ~40s restore into a ~10 min rebuild).
+ */
+function moveDir(from, to) {
+  mkdirSync(dirname(to), { recursive: true });
+  if (existsSync(to)) {
+    rmSync(to, { recursive: true, force: true });
+  }
+
+  stopGradleDaemon(from);
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      renameSync(from, to);
+      return;
+    } catch (err) {
+      console.log(`Rename attempt ${attempt}/3 failed (${err.code ?? err.message}).`);
+      sleep(1000 * attempt);
+    }
+  }
+
+  if (process.platform === 'win32') {
+    console.log('Falling back to robocopy /MOVE (keeps file timestamps).');
+    const result = spawnSync(
+      'robocopy',
+      [from, to, '/E', '/MOVE', '/NFL', '/NDL', '/NJH', '/NJS', '/NC', '/NS', '/R:2', '/W:2'],
+      { stdio: 'inherit', shell: true },
+    );
+    // robocopy: 0–7 = success, >= 8 = failure
+    if ((result.status ?? 16) >= 8) {
+      throw new Error(`robocopy failed with exit code ${result.status}`);
+    }
+    if (existsSync(from)) {
+      rmSync(from, { recursive: true, force: true });
+    }
+    return;
+  }
+
+  console.log('Falling back to copy + delete.');
+  cpSync(from, to, { recursive: true });
+  rmSync(from, { recursive: true, force: true });
 }
 
 function stashNative(current) {
   const slot = cacheDirFor(current);
   mkdirSync(cacheRoot, { recursive: true });
-  if (existsSync(slot)) {
-    rmSync(slot, { recursive: true, force: true });
-  }
   moveDir(androidDir, slot);
   console.log(`Cached the ${current} native build in .native-cache/`);
 }
