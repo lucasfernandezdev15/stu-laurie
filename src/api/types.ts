@@ -89,7 +89,8 @@ export interface VideoRecord {
   posterUrl?: string | null;
   durationSeconds?: number | null;
   durationMinutes?: number | null;
-  /** Not in Swagger yet — only set when BE sends it. */
+  /** e.g. "free" | "premium" */
+  accessLevel?: string | null;
   isPremium?: boolean;
   premium?: boolean;
   requiresSubscription?: boolean;
@@ -132,6 +133,8 @@ export interface LiveEventRecord {
   endedAt?: string | null;
   thumbnailUrl?: string | null;
   posterUrl?: string | null;
+  /** e.g. "free" | "premium" */
+  accessLevel?: string | null;
   isPremium?: boolean;
   premium?: boolean;
   requiresSubscription?: boolean;

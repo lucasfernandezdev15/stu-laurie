@@ -1,8 +1,8 @@
 /**
- * Per-title premium badges and playback gates are paused until the BE
- * documents a field on videos / live-events (Swagger has none today).
+ * Per-title premium badges and playback gates.
+ * BE sends `accessLevel: "premium" | "free"` (also legacy isPremium / accessTier).
  */
-export const PREMIUM_ON_HOLD = true;
+export const PREMIUM_ON_HOLD = false;
 
 /**
  * YouTube watch URLs often block iframe embeds ("owner disabled playback

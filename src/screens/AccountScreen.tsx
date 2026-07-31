@@ -48,69 +48,77 @@ export function AccountScreen({ navigation }: Props) {
   };
 
   return (
-    <Screen style={isDesktop && styles.rootDesktop}>
+    <Screen>
       <StatusBar style="light" />
       <ScrollView
         contentContainerStyle={[
           styles.content,
           { paddingHorizontal: pad },
+          isDesktop && styles.contentDesktop,
         ]}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.title}>Account</Text>
-        <View style={styles.card}>
-          <Text style={styles.label}>Signed in as</Text>
-          <Text style={styles.value}>{user?.name}</Text>
-          <Text style={styles.email}>{user?.email}</Text>
-          <AppButton
-            label="Sign out"
-            variant="secondary"
-            onPress={() => void logout()}
-            style={styles.signOut}
-          />
-        </View>
-        <View style={styles.card}>
-          <Text style={styles.label}>Subscription</Text>
-          <Text style={styles.value}>
-            {hasActiveSubscription
-              ? `Active · ${planId ?? 'plan'}`
-              : 'Inactive'}
+        <View style={isDesktop ? styles.column : undefined}>
+          <Text style={styles.title}>Account</Text>
+          <View style={styles.card}>
+            <Text style={styles.label}>Signed in as</Text>
+            <Text style={styles.value}>{user?.name}</Text>
+            <Text style={styles.email}>{user?.email}</Text>
+            <AppButton
+              label="Sign out"
+              variant="secondary"
+              onPress={() => void logout()}
+              style={styles.signOut}
+            />
+          </View>
+          <View style={styles.card}>
+            <Text style={styles.label}>Subscription</Text>
+            <Text style={styles.value}>
+              {hasActiveSubscription
+                ? `Active · ${planId ?? 'plan'}`
+                : 'Inactive'}
+            </Text>
+            <AppButton
+              label={
+                hasActiveSubscription ? 'Manage on web' : 'Subscribe on web'
+              }
+              onPress={() => void openSubscribeWeb(user?.email)}
+              style={styles.cta}
+            />
+            <AppButton
+              label={refreshing ? 'Refreshing…' : 'Refresh status'}
+              variant="ghost"
+              onPress={onRefresh}
+              disabled={refreshing}
+            />
+            <AppButton
+              label="Subscription details"
+              variant="ghost"
+              onPress={() => navigation.navigate('Subscribe')}
+            />
+          </View>
+          <Text style={styles.note}>
+            Billing opens in the browser. Membership unlocks after WooCommerce
+            syncs with the backend (webhook).
           </Text>
-          <AppButton
-            label={hasActiveSubscription ? 'Manage on web' : 'Subscribe on web'}
-            onPress={() => void openSubscribeWeb(user?.email)}
-            style={styles.cta}
-          />
-          <AppButton
-            label={refreshing ? 'Refreshing…' : 'Refresh status'}
-            variant="ghost"
-            onPress={onRefresh}
-            disabled={refreshing}
-          />
-          <AppButton
-            label="Subscription details"
-            variant="ghost"
-            onPress={() => navigation.navigate('Subscribe')}
-          />
         </View>
-        <Text style={styles.note}>
-          Billing opens in the browser. Membership unlocks after WooCommerce
-          syncs with the backend (webhook).
-        </Text>
       </ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  rootDesktop: {
-    maxWidth: 560,
-    width: '100%',
-    alignSelf: 'flex-start',
-  },
   content: {
     paddingTop: 8,
     paddingBottom: 32,
+    flexGrow: 1,
+  },
+  contentDesktop: {
+    alignItems: 'center',
+  },
+  column: {
+    width: '100%',
+    maxWidth: 560,
   },
   title: {
     fontFamily: 'BebasNeue_400Regular',

@@ -52,13 +52,28 @@ export const DEFAULT_CATEGORIES = [
 
 const PLACEHOLDER_FORMAT: StreamFormat = 'hls';
 
-/** Swagger has no premium field yet — default free unless BE sends one explicitly. */
+/** Prefer accessLevel from BE; fall back to legacy boolean / tier fields. */
 function resolveIsPremium(record: {
+  accessLevel?: string | null;
   isPremium?: boolean;
   premium?: boolean;
   requiresSubscription?: boolean;
   accessTier?: string | null;
 }): boolean {
+  if (typeof record.accessLevel === 'string' && record.accessLevel.trim()) {
+    const level = record.accessLevel.trim().toLowerCase();
+    if (level === 'free' || level === 'public') {
+      return false;
+    }
+    if (
+      level === 'premium' ||
+      level === 'subscriber' ||
+      level === 'paid' ||
+      level === 'members'
+    ) {
+      return true;
+    }
+  }
   if (typeof record.isPremium === 'boolean') {
     return record.isPremium;
   }

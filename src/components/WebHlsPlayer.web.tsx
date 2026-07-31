@@ -3,11 +3,9 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
-  useState,
 } from 'react';
-import { ActivityIndicator, StyleSheet, View, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type ViewStyle } from 'react-native';
 import Hls from 'hls.js';
-import { colors } from '../theme/colors';
 
 export type WebHlsPlayerRef = {
   play: () => void;
@@ -47,7 +45,6 @@ export const WebHlsPlayer = forwardRef<WebHlsPlayerRef, Props>(
   ) {
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const hlsRef = useRef<Hls | null>(null);
-    const [buffering, setBuffering] = useState(true);
 
     useImperativeHandle(ref, () => ({
       play: () => {
@@ -77,7 +74,6 @@ export const WebHlsPlayer = forwardRef<WebHlsPlayerRef, Props>(
         return;
       }
 
-      setBuffering(true);
       let disposed = false;
 
       const cleanup = () => {
@@ -95,12 +91,7 @@ export const WebHlsPlayer = forwardRef<WebHlsPlayerRef, Props>(
 
       video.onplay = () => onPlayingChange?.(true);
       video.onpause = () => onPlayingChange?.(false);
-      video.onwaiting = () => setBuffering(true);
-      video.onplaying = () => {
-        setBuffering(false);
-        onReady?.();
-      };
-      video.oncanplay = () => setBuffering(false);
+      video.onplaying = () => onReady?.();
 
       if (supportsNativeHls(video)) {
         video.src = url;
@@ -153,15 +144,9 @@ export const WebHlsPlayer = forwardRef<WebHlsPlayerRef, Props>(
       };
     }, [url, autoPlay, onError, onReady, onPlayingChange]);
 
+    // Browser / native controls already show buffering — one spinner only.
     return (
       <View style={[styles.wrap, style]}>
-        {buffering ? (
-          <ActivityIndicator
-            color={colors.accent}
-            size="large"
-            style={styles.spinner}
-          />
-        ) : null}
         <video
           ref={videoRef}
           controls={nativeControls}
@@ -187,8 +172,4 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     objectFit: 'contain',
   } as object,
-  spinner: {
-    position: 'absolute',
-    zIndex: 1,
-  },
 });

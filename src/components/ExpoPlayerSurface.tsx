@@ -1,9 +1,4 @@
-import {
-  forwardRef,
-  useImperativeHandle,
-  useRef,
-  useState,
-} from 'react';
+import { forwardRef, useImperativeHandle, useRef } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useEvent, useEventListener } from 'expo';
 import {
@@ -55,11 +50,13 @@ export const ExpoPlayerSurface = forwardRef<PlayerSurfaceRef, Props>(
       },
     }));
 
-    const isBuffering = status === 'loading' || status === 'idle';
+    // Mobile: native controls show buffering. TV has no controls → keep ours.
+    const showBuffering =
+      isTV && (status === 'loading' || status === 'idle');
 
     return (
       <View style={styles.wrap}>
-        {isBuffering ? (
+        {showBuffering ? (
           <ActivityIndicator
             color={colors.accent}
             size="large"
